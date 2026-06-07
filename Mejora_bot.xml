@@ -1,0 +1,1968 @@
+# Análisis y Mejora Profesional del Bot de Trading Deriv
+
+## 📊 Análisis del Bot Original
+
+Tu bot actual tiene:
+- **Estrategia base**: Análisis de últimos dígitos (Even/Odd) con umbral del 56%
+- **Martingale escalonado**: Incrementos manuales por nivel (×0.4, ×1, ×1.07, ×1.09, ×1, ×1.1, ×1.12, ×1.13, ×1.14)
+- **Gestión de riesgo**: Stop Loss ($100) y Take Profit ($3)
+- **Problema principal**: Martingale agresivo sin cooldown, sin multi-confluencia, sin protección contra rachas extremas
+
+## 🚀 Bot Mejorado: Sistema Multi-Confluencia + Martingale Inteligente + Cooldown
+
+He implementado las siguientes mejoras:
+
+1. **Martingale Fibonacci Inteligente** (no D'Alembert) - Escala basada en secuencia Fibonacci modificada
+2. **Sistema de Cooldown** - Pausa automática tras rachas de pérdidas
+3. **Multi-Confluencia** - Requiere múltiples señales alineadas antes de operar
+4. **Streak Detection** - Detección de patrones de rachas
+5. **Dynamic Threshold** - Umbral adaptativo según volatilidad
+6. **Session Protection** - Protección por sesión con drawdown máximo progresivo
+7. **Anti-Tilt System** - Reduce exposición cuando detecta comportamiento errático
+
+---
+
+```xml
+<xml xmlns="http://www.w3.org/1999/xhtml" collection="false">
+  <variables>
+    <variable type="" id="DW3mjXJpPvr7)vhno)~.">[fld2] Last Digit List</variable>
+    <variable type="" id="ZANWip{N:PSAp/tBH^rK">[fld2] How many ticks?</variable>
+    <variable type="" id=";wJj_I^Js9-1UR#/~_$1">Next Trade Condition</variable>
+    <variable type="" id="[en@;9L+TKtw(U2~(Ku2">fld2:LastDigitList</variable>
+    <variable type="" id="WVFA9_%DJ+K3!oq~UT-Y">fld2:even%</variable>
+    <variable type="" id="[}/%B)%3ElXnwq8Epc-F">fld2:odd%</variable>
+    <variable type="" id=":WPU,akMBs7bn$VYXx-f">Max Acceptable Loss</variable>
+    <variable type="" id="X[(S;ATE$Dbs3flXN{-m">Initial Amount</variable>
+    <variable type="" id="b/12s4uOVaF0h+`8+K]D">Contador_Loss</variable>
+    <variable type="" id=".9@YH*1NpucHe+jAsdF1">Expected Profit</variable>
+    <variable type="" id="TN1+}1m9k)fcT`p#]xKj">fld2:even</variable>
+    <variable type="" id="ZC9jlKp0p+PVYAU:n7?-">Win Amount</variable>
+    <variable type="" id="8xeP.9I4nOGGu}x2pz7R">fld2:odd</variable>
+    <variable type="" id="N65.yto^f%i%5lI$2W_=">fld2:n</variable>
+    <variable type="" id="FIB_SEQ_001">Fib_Sequence</variable>
+    <variable type="" id="FIB_IDX_001">Fib_Index</variable>
+    <variable type="" id="COOLDOWN_001">Cooldown_Active</variable>
+    <variable type="" id="COOLDOWN_CNT_001">Cooldown_Counter</variable>
+    <variable type="" id="COOLDOWN_MAX_001">Cooldown_Max</variable>
+    <variable type="" id="CONFLUENCE_001">Confluence_Score</variable>
+    <variable type="" id="CONFLUENCE_MIN_001">Confluence_Min</variable>
+    <variable type="" id="STREAK_001">Current_Streak</variable>
+    <variable type="" id="STREAK_TYPE_001">Streak_Type</variable>
+    <variable type="" id="MAX_STREAK_001">Max_Loss_Streak</variable>
+    <variable type="" id="SESSION_WINS_001">Session_Wins</variable>
+    <variable type="" id="SESSION_LOSSES_001">Session_Losses</variable>
+    <variable type="" id="SESSION_TRADES_001">Session_Trades</variable>
+    <variable type="" id="WINRATE_001">Session_Winrate</variable>
+    <variable type="" id="DYN_THRESH_001">Dynamic_Threshold</variable>
+    <variable type="" id="BASE_THRESH_001">Base_Threshold</variable>
+    <variable type="" id="VOLATILITY_001">Volatility_Score</variable>
+    <variable type="" id="PREV_EVEN_001">Prev_Even_Pct</variable>
+    <variable type="" id="PREV_ODD_001">Prev_Odd_Pct</variable>
+    <variable type="" id="TREND_CONFIRM_001">Trend_Confirmed</variable>
+    <variable type="" id="ANTI_TILT_001">Anti_Tilt_Mode</variable>
+    <variable type="" id="CONSEC_LOSS_LIMIT_001">Consec_Loss_Limit</variable>
+    <variable type="" id="DAILY_PROFIT_001">Daily_Profit_Target</variable>
+    <variable type="" id="DRAWDOWN_001">Max_Drawdown_Pct</variable>
+    <variable type="" id="PEAK_PROFIT_001">Peak_Profit</variable>
+    <variable type="" id="RECOVERY_MODE_001">Recovery_Mode</variable>
+    <variable type="" id="BASE_STAKE_001">Base_Stake</variable>
+    <variable type="" id="SKIP_TRADE_001">Skip_Trade</variable>
+    <variable type="" id="LONG_EVEN_001">Long_Even_Pct</variable>
+    <variable type="" id="LONG_ODD_001">Long_Odd_Pct</variable>
+    <variable type="" id="PATTERN_SCORE_001">Pattern_Score</variable>
+    <variable type="" id="LAST3_001">Last_3_Results</variable>
+    <variable type="" id="TOTAL_INVESTED_001">Total_Invested</variable>
+  </variables>
+  <block type="trade" id="trade" x="0" y="0">
+    <field name="MARKET_LIST">synthetic_index</field>
+    <field name="SUBMARKET_LIST">random_index</field>
+    <field name="SYMBOL_LIST">R_100</field>
+    <field name="TRADETYPECAT_LIST">digits</field>
+    <field name="TRADETYPE_LIST">evenodd</field>
+    <field name="TYPE_LIST">both</field>
+    <field name="CANDLEINTERVAL_LIST">60</field>
+    <field name="TIME_MACHINE_ENABLED">FALSE</field>
+    <field name="RESTARTONERROR">TRUE</field>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="E)N{E(NmY48Rx{S*%-$2">
+        <field name="VAR" id=";wJj_I^Js9-1UR#/~_$1" variabletype="">Next Trade Condition</field>
+        <value name="VALUE">
+          <block type="text" id="AsuRHO~]$hd)a#hY:#K]">
+            <field name="TEXT">Even</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="UHbM..aM}w@BeGUT:u[F">
+            <field name="VAR" id=":WPU,akMBs7bn$VYXx-f" variabletype="">Max Acceptable Loss</field>
+            <value name="VALUE">
+              <block type="math_number" id="HFH,,@6N(+SE]MUU)MC)">
+                <field name="NUM">50</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="P4VwO%9`ub#}!|?:Jzgg">
+                <field name="VAR" id=".9@YH*1NpucHe+jAsdF1" variabletype="">Expected Profit</field>
+                <value name="VALUE">
+                  <block type="math_number" id="l9zECia#*P(CYpP,e`JO">
+                    <field name="NUM">5</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="dyZV*+tc*@[acK!jCEH`">
+                    <field name="VAR" id="ZC9jlKp0p+PVYAU:n7?-" variabletype="">Win Amount</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="NRTi#47*ai}{!#QMJ=+v">
+                        <field name="NUM">0.35</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="jE=TS?ooJFBN4f.wswuf">
+                        <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="1llhm%F3?N*?$ch%_wwO">
+                            <field name="NUM">0.35</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="INIT_BASE_STAKE">
+                            <field name="VAR" id="BASE_STAKE_001" variabletype="">Base_Stake</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="BASE_STAKE_VAL">
+                                <field name="NUM">0.35</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="INIT_FIB_SEQ">
+                                <field name="VAR" id="FIB_SEQ_001" variabletype="">Fib_Sequence</field>
+                                <value name="VALUE">
+                                  <block type="lists_create_with" id="FIB_LIST_CREATE">
+                                    <mutation items="12"></mutation>
+                                    <value name="ADD0">
+                                      <block type="math_number" id="FIB_1"><field name="NUM">1</field></block>
+                                    </value>
+                                    <value name="ADD1">
+                                      <block type="math_number" id="FIB_2"><field name="NUM">1</field></block>
+                                    </value>
+                                    <value name="ADD2">
+                                      <block type="math_number" id="FIB_3"><field name="NUM">2</field></block>
+                                    </value>
+                                    <value name="ADD3">
+                                      <block type="math_number" id="FIB_4"><field name="NUM">3</field></block>
+                                    </value>
+                                    <value name="ADD4">
+                                      <block type="math_number" id="FIB_5"><field name="NUM">5</field></block>
+                                    </value>
+                                    <value name="ADD5">
+                                      <block type="math_number" id="FIB_6"><field name="NUM">8</field></block>
+                                    </value>
+                                    <value name="ADD6">
+                                      <block type="math_number" id="FIB_7"><field name="NUM">13</field></block>
+                                    </value>
+                                    <value name="ADD7">
+                                      <block type="math_number" id="FIB_8"><field name="NUM">21</field></block>
+                                    </value>
+                                    <value name="ADD8">
+                                      <block type="math_number" id="FIB_9"><field name="NUM">34</field></block>
+                                    </value>
+                                    <value name="ADD9">
+                                      <block type="math_number" id="FIB_10"><field name="NUM">55</field></block>
+                                    </value>
+                                    <value name="ADD10">
+                                      <block type="math_number" id="FIB_11"><field name="NUM">89</field></block>
+                                    </value>
+                                    <value name="ADD11">
+                                      <block type="math_number" id="FIB_12"><field name="NUM">144</field></block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="INIT_FIB_IDX">
+                                    <field name="VAR" id="FIB_IDX_001" variabletype="">Fib_Index</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="FIB_IDX_VAL"><field name="NUM">0</field></block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="INIT_COOLDOWN">
+                                        <field name="VAR" id="COOLDOWN_001" variabletype="">Cooldown_Active</field>
+                                        <value name="VALUE">
+                                          <block type="logic_boolean" id="COOL_FALSE"><field name="BOOL">FALSE</field></block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="INIT_COOL_CNT">
+                                            <field name="VAR" id="COOLDOWN_CNT_001" variabletype="">Cooldown_Counter</field>
+                                            <value name="VALUE">
+                                              <block type="math_number" id="COOL_CNT_VAL"><field name="NUM">0</field></block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="INIT_COOL_MAX">
+                                                <field name="VAR" id="COOLDOWN_MAX_001" variabletype="">Cooldown_Max</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="COOL_MAX_VAL"><field name="NUM">3</field></block>
+                                                </value>
+                                                <next>
+                                                  <block type="variables_set" id="INIT_CONFLUENCE">
+                                                    <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                                                    <value name="VALUE">
+                                                      <block type="math_number" id="CONF_VAL"><field name="NUM">0</field></block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="INIT_CONF_MIN">
+                                                        <field name="VAR" id="CONFLUENCE_MIN_001" variabletype="">Confluence_Min</field>
+                                                        <value name="VALUE">
+                                                          <block type="math_number" id="CONF_MIN_VAL"><field name="NUM">3</field></block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="variables_set" id="INIT_STREAK">
+                                                            <field name="VAR" id="STREAK_001" variabletype="">Current_Streak</field>
+                                                            <value name="VALUE">
+                                                              <block type="math_number" id="STREAK_VAL"><field name="NUM">0</field></block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="variables_set" id="INIT_STREAK_TYPE">
+                                                                <field name="VAR" id="STREAK_TYPE_001" variabletype="">Streak_Type</field>
+                                                                <value name="VALUE">
+                                                                  <block type="text" id="STREAK_TYPE_TXT"><field name="TEXT">none</field></block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="variables_set" id="INIT_MAX_STREAK">
+                                                                    <field name="VAR" id="MAX_STREAK_001" variabletype="">Max_Loss_Streak</field>
+                                                                    <value name="VALUE">
+                                                                      <block type="math_number" id="MAX_STR_VAL"><field name="NUM">0</field></block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="variables_set" id="INIT_SESS_WINS">
+                                                                        <field name="VAR" id="SESSION_WINS_001" variabletype="">Session_Wins</field>
+                                                                        <value name="VALUE">
+                                                                          <block type="math_number" id="SW_VAL"><field name="NUM">0</field></block>
+                                                                        </value>
+                                                                        <next>
+                                                                          <block type="variables_set" id="INIT_SESS_LOSS">
+                                                                            <field name="VAR" id="SESSION_LOSSES_001" variabletype="">Session_Losses</field>
+                                                                            <value name="VALUE">
+                                                                              <block type="math_number" id="SL_VAL"><field name="NUM">0</field></block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="variables_set" id="INIT_SESS_TRADES">
+                                                                                <field name="VAR" id="SESSION_TRADES_001" variabletype="">Session_Trades</field>
+                                                                                <value name="VALUE">
+                                                                                  <block type="math_number" id="ST_VAL"><field name="NUM">0</field></block>
+                                                                                </value>
+                                                                                <next>
+                                                                                  <block type="variables_set" id="INIT_WINRATE">
+                                                                                    <field name="VAR" id="WINRATE_001" variabletype="">Session_Winrate</field>
+                                                                                    <value name="VALUE">
+                                                                                      <block type="math_number" id="WR_VAL"><field name="NUM">50</field></block>
+                                                                                    </value>
+                                                                                    <next>
+                                                                                      <block type="variables_set" id="INIT_DYN_THRESH">
+                                                                                        <field name="VAR" id="DYN_THRESH_001" variabletype="">Dynamic_Threshold</field>
+                                                                                        <value name="VALUE">
+                                                                                          <block type="math_number" id="DT_VAL"><field name="NUM">58</field></block>
+                                                                                        </value>
+                                                                                        <next>
+                                                                                          <block type="variables_set" id="INIT_BASE_THRESH">
+                                                                                            <field name="VAR" id="BASE_THRESH_001" variabletype="">Base_Threshold</field>
+                                                                                            <value name="VALUE">
+                                                                                              <block type="math_number" id="BT_VAL"><field name="NUM">58</field></block>
+                                                                                            </value>
+                                                                                            <next>
+                                                                                              <block type="variables_set" id="INIT_VOLATILITY">
+                                                                                                <field name="VAR" id="VOLATILITY_001" variabletype="">Volatility_Score</field>
+                                                                                                <value name="VALUE">
+                                                                                                  <block type="math_number" id="VOL_VAL"><field name="NUM">0</field></block>
+                                                                                                </value>
+                                                                                                <next>
+                                                                                                  <block type="variables_set" id="INIT_PREV_EVEN">
+                                                                                                    <field name="VAR" id="PREV_EVEN_001" variabletype="">Prev_Even_Pct</field>
+                                                                                                    <value name="VALUE">
+                                                                                                      <block type="math_number" id="PE_VAL"><field name="NUM">50</field></block>
+                                                                                                    </value>
+                                                                                                    <next>
+                                                                                                      <block type="variables_set" id="INIT_PREV_ODD">
+                                                                                                        <field name="VAR" id="PREV_ODD_001" variabletype="">Prev_Odd_Pct</field>
+                                                                                                        <value name="VALUE">
+                                                                                                          <block type="math_number" id="PO_VAL"><field name="NUM">50</field></block>
+                                                                                                        </value>
+                                                                                                        <next>
+                                                                                                          <block type="variables_set" id="INIT_TREND_CONF">
+                                                                                                            <field name="VAR" id="TREND_CONFIRM_001" variabletype="">Trend_Confirmed</field>
+                                                                                                            <value name="VALUE">
+                                                                                                              <block type="logic_boolean" id="TC_FALSE"><field name="BOOL">FALSE</field></block>
+                                                                                                            </value>
+                                                                                                            <next>
+                                                                                                              <block type="variables_set" id="INIT_ANTI_TILT">
+                                                                                                                <field name="VAR" id="ANTI_TILT_001" variabletype="">Anti_Tilt_Mode</field>
+                                                                                                                <value name="VALUE">
+                                                                                                                  <block type="logic_boolean" id="AT_FALSE"><field name="BOOL">FALSE</field></block>
+                                                                                                                </value>
+                                                                                                                <next>
+                                                                                                                  <block type="variables_set" id="INIT_CONSEC_LIMIT">
+                                                                                                                    <field name="VAR" id="CONSEC_LOSS_LIMIT_001" variabletype="">Consec_Loss_Limit</field>
+                                                                                                                    <value name="VALUE">
+                                                                                                                      <block type="math_number" id="CLL_VAL"><field name="NUM">5</field></block>
+                                                                                                                    </value>
+                                                                                                                    <next>
+                                                                                                                      <block type="variables_set" id="INIT_PEAK">
+                                                                                                                        <field name="VAR" id="PEAK_PROFIT_001" variabletype="">Peak_Profit</field>
+                                                                                                                        <value name="VALUE">
+                                                                                                                          <block type="math_number" id="PEAK_VAL"><field name="NUM">0</field></block>
+                                                                                                                        </value>
+                                                                                                                        <next>
+                                                                                                                          <block type="variables_set" id="INIT_RECOVERY">
+                                                                                                                            <field name="VAR" id="RECOVERY_MODE_001" variabletype="">Recovery_Mode</field>
+                                                                                                                            <value name="VALUE">
+                                                                                                                              <block type="logic_boolean" id="REC_FALSE"><field name="BOOL">FALSE</field></block>
+                                                                                                                            </value>
+                                                                                                                            <next>
+                                                                                                                              <block type="variables_set" id="INIT_SKIP">
+                                                                                                                                <field name="VAR" id="SKIP_TRADE_001" variabletype="">Skip_Trade</field>
+                                                                                                                                <value name="VALUE">
+                                                                                                                                  <block type="logic_boolean" id="SKIP_FALSE"><field name="BOOL">FALSE</field></block>
+                                                                                                                                </value>
+                                                                                                                                <next>
+                                                                                                                                  <block type="variables_set" id="INIT_LONG_EVEN">
+                                                                                                                                    <field name="VAR" id="LONG_EVEN_001" variabletype="">Long_Even_Pct</field>
+                                                                                                                                    <value name="VALUE">
+                                                                                                                                      <block type="math_number" id="LE_VAL"><field name="NUM">50</field></block>
+                                                                                                                                    </value>
+                                                                                                                                    <next>
+                                                                                                                                      <block type="variables_set" id="INIT_LONG_ODD">
+                                                                                                                                        <field name="VAR" id="LONG_ODD_001" variabletype="">Long_Odd_Pct</field>
+                                                                                                                                        <value name="VALUE">
+                                                                                                                                          <block type="math_number" id="LO_VAL"><field name="NUM">50</field></block>
+                                                                                                                                        </value>
+                                                                                                                                        <next>
+                                                                                                                                          <block type="variables_set" id="INIT_PATTERN">
+                                                                                                                                            <field name="VAR" id="PATTERN_SCORE_001" variabletype="">Pattern_Score</field>
+                                                                                                                                            <value name="VALUE">
+                                                                                                                                              <block type="math_number" id="PS_VAL"><field name="NUM">0</field></block>
+                                                                                                                                            </value>
+                                                                                                                                            <next>
+                                                                                                                                              <block type="variables_set" id="INIT_LAST3">
+                                                                                                                                                <field name="VAR" id="LAST3_001" variabletype="">Last_3_Results</field>
+                                                                                                                                                <value name="VALUE">
+                                                                                                                                                  <block type="lists_create_with" id="LAST3_LIST">
+                                                                                                                                                    <mutation items="0"></mutation>
+                                                                                                                                                  </block>
+                                                                                                                                                </value>
+                                                                                                                                                <next>
+                                                                                                                                                  <block type="variables_set" id="INIT_TOTAL_INV">
+                                                                                                                                                    <field name="VAR" id="TOTAL_INVESTED_001" variabletype="">Total_Invested</field>
+                                                                                                                                                    <value name="VALUE">
+                                                                                                                                                      <block type="math_number" id="TI_VAL"><field name="NUM">0</field></block>
+                                                                                                                                                    </value>
+                                                                                                                                                  </block>
+                                                                                                                                                </next>
+                                                                                                                                              </block>
+                                                                                                                                            </next>
+                                                                                                                                          </block>
+                                                                                                                                        </next>
+                                                                                                                                      </block>
+                                                                                                                                    </next>
+                                                                                                                                  </block>
+                                                                                                                                </next>
+                                                                                                                              </block>
+                                                                                                                            </next>
+                                                                                                                          </block>
+                                                                                                                        </next>
+                                                                                                                      </block>
+                                                                                                                    </next>
+                                                                                                                  </block>
+                                                                                                                </next>
+                                                                                                              </block>
+                                                                                                            </next>
+                                                                                                          </block>
+                                                                                                        </next>
+                                                                                                      </block>
+                                                                                                    </next>
+                                                                                                  </block>
+                                                                                                </next>
+                                                                                              </block>
+                                                                                            </next>
+                                                                                          </block>
+                                                                                        </next>
+                                                                                      </block>
+                                                                                    </next>
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="tradeOptions" id=")YzxnU6]oSlGh+U)rE;C">
+        <field name="DURATIONTYPE_LIST">t</field>
+        <field name="CURRENCY_LIST">USD</field>
+        <field name="BARRIEROFFSETTYPE_LIST">+</field>
+        <field name="SECONDBARRIEROFFSETTYPE_LIST">-</field>
+        <value name="DURATION">
+          <block type="math_number" id="!S1bj=$l#1-YfPNo$g%,">
+            <field name="NUM">2</field>
+          </block>
+        </value>
+        <value name="AMOUNT">
+          <block type="variables_get" id="7nzOAJqEn6)+OAYI30hM">
+            <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="strategy" x="0" y="550">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="timeout" id="^/5=ZFs|/y+5^EQwfGMY">
+        <statement name="TIMEOUTSTACK">
+          <block type="procedures_callnoreturn" id="CALL_CONFLUENCE_CALC">
+            <mutation name="Calculate_Confluence"></mutation>
+            <next>
+              <block type="procedures_callnoreturn" id="CALL_COOLDOWN_CHECK">
+                <mutation name="Check_Cooldown"></mutation>
+                <next>
+                  <block type="controls_if" id="CHECK_SKIP_TRADE">
+                    <mutation elseif="2" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_compare" id="SKIP_TRUE_CHECK">
+                        <field name="OP">EQ</field>
+                        <value name="A">
+                          <block type="variables_get" id="GET_SKIP">
+                            <field name="VAR" id="SKIP_TRADE_001" variabletype="">Skip_Trade</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_boolean" id="SKIP_TRUE_VAL"><field name="BOOL">TRUE</field></block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="notify" id="NOTIFY_SKIP">
+                        <field name="NOTIFICATION_TYPE">warn</field>
+                        <field name="NOTIFICATION_SOUND">silent</field>
+                        <value name="MESSAGE">
+                          <shadow type="text" id="SKIP_SHADOW"><field name="TEXT">abc</field></shadow>
+                          <block type="text" id="SKIP_MSG"><field name="TEXT">⏸️ COOLDOWN - Esperando señal segura...</field></block>
+                        </value>
+                      </block>
+                    </statement>
+                    <value name="IF1">
+                      <block type="logic_operation" id="CONFLUENCE_EVEN_CHECK">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_compare" id="EVEN_THRESH_CHECK">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="procedures_callreturn" id="CALL_EVEN_PCT_1">
+                                <mutation name="LD Even (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="GET_DYN_THRESH_1">
+                                <field name="VAR" id="DYN_THRESH_001" variabletype="">Dynamic_Threshold</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="CONF_SCORE_CHECK_EVEN">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="GET_CONF_SCORE_1">
+                                <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="GET_CONF_MIN_1">
+                                <field name="VAR" id="CONFLUENCE_MIN_001" variabletype="">Confluence_Min</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO1">
+                      <block type="notify" id="NOTIFY_EVEN_TRADE">
+                        <field name="NOTIFICATION_TYPE">success</field>
+                        <field name="NOTIFICATION_SOUND">silent</field>
+                        <value name="MESSAGE">
+                          <shadow type="text" id="EVEN_SHADOW"><field name="TEXT">abc</field></shadow>
+                          <block type="text_join" id="EVEN_MSG_JOIN">
+                            <mutation items="6"></mutation>
+                            <value name="ADD0">
+                              <block type="text" id="EVEN_TXT1"><field name="TEXT">✅ EVEN | Conf:</field></block>
+                            </value>
+                            <value name="ADD1">
+                              <block type="variables_get" id="GET_CONF_DISP1">
+                                <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                              </block>
+                            </value>
+                            <value name="ADD2">
+                              <block type="text" id="EVEN_TXT2"><field name="TEXT"> | E:</field></block>
+                            </value>
+                            <value name="ADD3">
+                              <block type="procedures_callreturn" id="CALL_EVEN_DISP">
+                                <mutation name="LD Even (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="ADD4">
+                              <block type="text" id="EVEN_TXT3"><field name="TEXT">% | Stake:</field></block>
+                            </value>
+                            <value name="ADD5">
+                              <block type="variables_get" id="GET_STAKE_DISP1">
+                                <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="purchase" id="PURCHASE_EVEN">
+                            <field name="PURCHASE_LIST">DIGITEVEN</field>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <value name="IF2">
+                      <block type="logic_operation" id="CONFLUENCE_ODD_CHECK">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_compare" id="ODD_THRESH_CHECK">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="procedures_callreturn" id="CALL_ODD_PCT_1">
+                                <mutation name="LD Odd (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="GET_DYN_THRESH_2">
+                                <field name="VAR" id="DYN_THRESH_001" variabletype="">Dynamic_Threshold</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="CONF_SCORE_CHECK_ODD">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="GET_CONF_SCORE_2">
+                                <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="GET_CONF_MIN_2">
+                                <field name="VAR" id="CONFLUENCE_MIN_001" variabletype="">Confluence_Min</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO2">
+                      <block type="notify" id="NOTIFY_ODD_TRADE">
+                        <field name="NOTIFICATION_TYPE">success</field>
+                        <field name="NOTIFICATION_SOUND">silent</field>
+                        <value name="MESSAGE">
+                          <shadow type="text" id="ODD_SHADOW"><field name="TEXT">abc</field></shadow>
+                          <block type="text_join" id="ODD_MSG_JOIN">
+                            <mutation items="6"></mutation>
+                            <value name="ADD0">
+                              <block type="text" id="ODD_TXT1"><field name="TEXT">✅ ODD | Conf:</field></block>
+                            </value>
+                            <value name="ADD1">
+                              <block type="variables_get" id="GET_CONF_DISP2">
+                                <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                              </block>
+                            </value>
+                            <value name="ADD2">
+                              <block type="text" id="ODD_TXT2"><field name="TEXT"> | O:</field></block>
+                            </value>
+                            <value name="ADD3">
+                              <block type="procedures_callreturn" id="CALL_ODD_DISP">
+                                <mutation name="LD Odd (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="ADD4">
+                              <block type="text" id="ODD_TXT3"><field name="TEXT">% | Stake:</field></block>
+                            </value>
+                            <value name="ADD5">
+                              <block type="variables_get" id="GET_STAKE_DISP2">
+                                <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="purchase" id="PURCHASE_ODD">
+                            <field name="PURCHASE_LIST">DIGITODD</field>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="notify" id="NOTIFY_WAIT">
+                        <field name="NOTIFICATION_TYPE">info</field>
+                        <field name="NOTIFICATION_SOUND">silent</field>
+                        <value name="MESSAGE">
+                          <shadow type="text" id="WAIT_SHADOW"><field name="TEXT">abc</field></shadow>
+                          <block type="text_join" id="WAIT_MSG_JOIN">
+                            <mutation items="6"></mutation>
+                            <value name="ADD0">
+                              <block type="text" id="WAIT_TXT1"><field name="TEXT">⏳ Sin confluencia | E:</field></block>
+                            </value>
+                            <value name="ADD1">
+                              <block type="procedures_callreturn" id="CALL_EVEN_WAIT">
+                                <mutation name="LD Even (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="ADD2">
+                              <block type="text" id="WAIT_TXT2"><field name="TEXT">% O:</field></block>
+                            </value>
+                            <value name="ADD3">
+                              <block type="procedures_callreturn" id="CALL_ODD_WAIT">
+                                <mutation name="LD Odd (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="ADD4">
+                              <block type="text" id="WAIT_TXT3"><field name="TEXT">% | Conf:</field></block>
+                            </value>
+                            <value name="ADD5">
+                              <block type="variables_get" id="GET_CONF_WAIT">
+                                <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <value name="SECONDS">
+          <shadow type="math_number" id="9:[OL?62dTl`B:EoK6IJ">
+            <field name="NUM">2</field>
+          </shadow>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="finish" x="0" y="603">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="math_change" id="INCREMENT_TRADES">
+        <field name="VAR" id="SESSION_TRADES_001" variabletype="">Session_Trades</field>
+        <value name="DELTA">
+          <shadow type="math_number" id="INC_TRADES_VAL"><field name="NUM">1</field></shadow>
+        </value>
+        <next>
+          <block type="controls_if" id="CHECK_WIN_LOSS_MAIN">
+            <mutation else="1"></mutation>
+            <value name="IF0">
+              <block type="contract_check_result" id="CHECK_LOSS_MAIN">
+                <field name="CHECK_RESULT">loss</field>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="procedures_callnoreturn" id="CALL_HANDLE_LOSS">
+                <mutation name="Handle_Loss"></mutation>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="controls_if" id="CHECK_WIN_INNER">
+                <value name="IF0">
+                  <block type="contract_check_result" id="CHECK_WIN_RESULT">
+                    <field name="CHECK_RESULT">win</field>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="procedures_callnoreturn" id="CALL_HANDLE_WIN">
+                    <mutation name="Handle_Win"></mutation>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+            <next>
+              <block type="procedures_callnoreturn" id="CALL_UPDATE_PEAK">
+                <mutation name="Update_Peak_Drawdown"></mutation>
+                <next>
+                  <block type="notify" id="NOTIFY_STATUS">
+                    <field name="NOTIFICATION_TYPE">info</field>
+                    <field name="NOTIFICATION_SOUND">silent</field>
+                    <value name="MESSAGE">
+                      <block type="text_join" id="STATUS_JOIN">
+                        <mutation items="8"></mutation>
+                        <value name="ADD0">
+                          <block type="text" id="STAT_TXT1"><field name="TEXT">📊 P/L:</field></block>
+                        </value>
+                        <value name="ADD1">
+                          <block type="total_profit" id="GET_TOTAL_PROF"></block>
+                        </value>
+                        <value name="ADD2">
+                          <block type="text" id="STAT_TXT2"><field name="TEXT"> | WR:</field></block>
+                        </value>
+                        <value name="ADD3">
+                          <block type="variables_get" id="GET_WR_DISP">
+                            <field name="VAR" id="WINRATE_001" variabletype="">Session_Winrate</field>
+                          </block>
+                        </value>
+                        <value name="ADD4">
+                          <block type="text" id="STAT_TXT3"><field name="TEXT">% | Streak:</field></block>
+                        </value>
+                        <value name="ADD5">
+                          <block type="variables_get" id="GET_STREAK_DISP">
+                            <field name="VAR" id="STREAK_001" variabletype="">Current_Streak</field>
+                          </block>
+                        </value>
+                        <value name="ADD6">
+                          <block type="text" id="STAT_TXT4"><field name="TEXT"> | Fib:</field></block>
+                        </value>
+                        <value name="ADD7">
+                          <block type="variables_get" id="GET_FIB_DISP">
+                            <field name="VAR" id="FIB_IDX_001" variabletype="">Fib_Index</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="controls_if" id="FINAL_DECISION">
+                        <mutation else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_compare" id="CHECK_BELOW_TARGET">
+                            <field name="OP">LT</field>
+                            <value name="A">
+                              <block type="total_profit" id="GET_PROF_DECISION"></block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="GET_EXP_PROF">
+                                <field name="VAR" id=".9@YH*1NpucHe+jAsdF1" variabletype="">Expected Profit</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="controls_if" id="CHECK_MAX_LOSS_FINAL">
+                            <mutation else="1"></mutation>
+                            <value name="IF0">
+                              <block type="logic_operation" id="LOSS_LIMIT_CHECK">
+                                <field name="OP">AND</field>
+                                <value name="A">
+                                  <block type="math_number_property" id="CHECK_NEG_PROF">
+                                    <mutation divisor_input="false"></mutation>
+                                    <field name="PROPERTY">NEGATIVE</field>
+                                    <value name="NUMBER_TO_CHECK">
+                                      <shadow type="math_number" id="NEG_SHADOW"><field name="NUM">0</field></shadow>
+                                      <block type="total_profit" id="GET_PROF_NEG"></block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="logic_compare" id="CHECK_ABS_LOSS">
+                                    <field name="OP">GTE</field>
+                                    <value name="A">
+                                      <block type="math_single" id="ABS_LOSS_CALC">
+                                        <field name="OP">ABS</field>
+                                        <value name="NUM">
+                                          <shadow type="math_number" id="ABS_SHADOW"><field name="NUM">9</field></shadow>
+                                          <block type="total_profit" id="GET_PROF_ABS"></block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variables_get" id="GET_MAX_LOSS">
+                                        <field name="VAR" id=":WPU,akMBs7bn$VYXx-f" variabletype="">Max Acceptable Loss</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="text_print" id="PRINT_MAX_LOSS">
+                                <value name="TEXT">
+                                  <shadow type="text" id="MAX_LOSS_SHADOW"><field name="TEXT">abc</field></shadow>
+                                  <block type="text" id="MAX_LOSS_MSG"><field name="TEXT">🛑 Máximo pérdidas alcanzado. Bot detenido.</field></block>
+                                </value>
+                              </block>
+                            </statement>
+                            <statement name="ELSE">
+                              <block type="trade_again" id="TRADE_AGAIN_MAIN"></block>
+                            </statement>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <block type="text_print" id="PRINT_TARGET_REACHED">
+                            <value name="TEXT">
+                              <shadow type="text" id="TARGET_SHADOW"><field name="TEXT">abc</field></shadow>
+                              <block type="text_join" id="TARGET_MSG_JOIN">
+                                <mutation items="2"></mutation>
+                                <value name="ADD0">
+                                  <block type="text" id="TARGET_TXT"><field name="TEXT">🎯 Meta Alcanzada! 💲 </field></block>
+                                </value>
+                                <value name="ADD1">
+                                  <block type="total_profit" id="GET_FINAL_PROF"></block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="procedures_defnoreturn" id="PROC_HANDLE_LOSS" x="400" y="0">
+    <field name="NAME">Handle_Loss</field>
+    <statement name="STACK">
+      <block type="math_change" id="INC_LOSS_COUNT">
+        <field name="VAR" id="b/12s4uOVaF0h+`8+K]D" variabletype="">Contador_Loss</field>
+        <value name="DELTA">
+          <shadow type="math_number" id="INC_LOSS_VAL"><field name="NUM">1</field></shadow>
+        </value>
+        <next>
+          <block type="math_change" id="INC_SESS_LOSS">
+            <field name="VAR" id="SESSION_LOSSES_001" variabletype="">Session_Losses</field>
+            <value name="DELTA">
+              <shadow type="math_number" id="INC_SL_VAL"><field name="NUM">1</field></shadow>
+            </value>
+            <next>
+              <block type="variables_set" id="SET_STREAK_LOSS">
+                <field name="VAR" id="STREAK_TYPE_001" variabletype="">Streak_Type</field>
+                <value name="VALUE">
+                  <block type="text" id="STREAK_LOSS_TXT"><field name="TEXT">loss</field></block>
+                </value>
+                <next>
+                  <block type="math_change" id="INC_STREAK_LOSS">
+                    <field name="VAR" id="STREAK_001" variabletype="">Current_Streak</field>
+                    <value name="DELTA">
+                      <shadow type="math_number" id="INC_STR_VAL"><field name="NUM">1</field></shadow>
+                    </value>
+                    <next>
+                      <block type="controls_if" id="CHECK_MAX_STREAK_UPDATE">
+                        <value name="IF0">
+                          <block type="logic_compare" id="STREAK_GT_MAX">
+                            <field name="OP">GT</field>
+                            <value name="A">
+                              <block type="variables_get" id="GET_CUR_STREAK">
+                                <field name="VAR" id="STREAK_001" variabletype="">Current_Streak</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="GET_MAX_STR">
+                                <field name="VAR" id="MAX_STREAK_001" variabletype="">Max_Loss_Streak</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="UPDATE_MAX_STREAK">
+                            <field name="VAR" id="MAX_STREAK_001" variabletype="">Max_Loss_Streak</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="SET_MAX_TO_CUR">
+                                <field name="VAR" id="STREAK_001" variabletype="">Current_Streak</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="procedures_callnoreturn" id="CALL_UPDATE_WINRATE">
+                            <mutation name="Update_Winrate"></mutation>
+                            <next>
+                              <block type="controls_if" id="CHECK_ACTIVATE_COOLDOWN">
+                                <value name="IF0">
+                                  <block type="logic_compare" id="STREAK_GTE_LIMIT">
+                                    <field name="OP">GTE</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="GET_STREAK_CD">
+                                        <field name="VAR" id="b/12s4uOVaF0h+`8+K]D" variabletype="">Contador_Loss</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variables_get" id="GET_CONSEC_LIM">
+                                        <field name="VAR" id="CONSEC_LOSS_LIMIT_001" variabletype="">Consec_Loss_Limit</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <statement name="DO0">
+                                  <block type="variables_set" id="ACTIVATE_COOLDOWN">
+                                    <field name="VAR" id="COOLDOWN_001" variabletype="">Cooldown_Active</field>
+                                    <value name="VALUE">
+                                      <block type="logic_boolean" id="CD_TRUE"><field name="BOOL">TRUE</field></block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="SET_CD_COUNTER">
+                                        <field name="VAR" id="COOLDOWN_CNT_001" variabletype="">Cooldown_Counter</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="CD_CNT_RESET"><field name="NUM">0</field></block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="SET_SKIP_TRUE">
+                                            <field name="VAR" id="SKIP_TRADE_001" variabletype="">Skip_Trade</field>
+                                            <value name="VALUE">
+                                              <block type="logic_boolean" id="SKIP_SET_TRUE"><field name="BOOL">TRUE</field></block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="ACTIVATE_ANTI_TILT">
+                                                <field name="VAR" id="ANTI_TILT_001" variabletype="">Anti_Tilt_Mode</field>
+                                                <value name="VALUE">
+                                                  <block type="logic_boolean" id="TILT_TRUE"><field name="BOOL">TRUE</field></block>
+                                                </value>
+                                                <next>
+                                                  <block type="notify" id="NOTIFY_CD_ACTIVATED">
+                                                    <field name="NOTIFICATION_TYPE">warn</field>
+                                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                                    <value name="MESSAGE">
+                                                      <shadow type="text" id="CD_ACT_SHADOW"><field name="TEXT">abc</field></shadow>
+                                                      <block type="text_join" id="CD_ACT_MSG">
+                                                        <mutation items="2"></mutation>
+                                                        <value name="ADD0">
+                                                          <block type="text" id="CD_TXT"><field name="TEXT">🧊 COOLDOWN ACTIVADO - Rachas consecutivas: </field></block>
+                                                        </value>
+                                                        <value name="ADD1">
+                                                          <block type="variables_get" id="GET_LOSS_CNT_CD">
+                                                            <field name="VAR" id="b/12s4uOVaF0h+`8+K]D" variabletype="">Contador_Loss</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="procedures_callnoreturn" id="CALL_FIB_MARTINGALE">
+                                    <mutation name="Fibonacci_Martingale"></mutation>
+                                    <next>
+                                      <block type="notify" id="NOTIFY_LOSS_DETAIL">
+                                        <field name="NOTIFICATION_TYPE">error</field>
+                                        <field name="NOTIFICATION_SOUND">silent</field>
+                                        <value name="MESSAGE">
+                                          <block type="text_join" id="LOSS_DETAIL_JOIN">
+                                            <mutation items="4"></mutation>
+                                            <value name="ADD0">
+                                              <block type="text" id="LOSS_D1"><field name="TEXT">❌ Loss #</field></block>
+                                            </value>
+                                            <value name="ADD1">
+                                              <block type="variables_get" id="GET_LOSS_NUM">
+                                                <field name="VAR" id="b/12s4uOVaF0h+`8+K]D" variabletype="">Contador_Loss</field>
+                                              </block>
+                                            </value>
+                                            <value name="ADD2">
+                                              <block type="text" id="LOSS_D2"><field name="TEXT"> | Next Stake: </field></block>
+                                            </value>
+                                            <value name="ADD3">
+                                              <block type="variables_get" id="GET_NEXT_STAKE">
+                                                <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="procedures_defnoreturn" id="PROC_HANDLE_WIN" x="400" y="300">
+    <field name="NAME">Handle_Win</field>
+    <statement name="STACK">
+      <block type="variables_set" id="RESET_LOSS_CNT">
+        <field name="VAR" id="b/12s4uOVaF0h+`8+K]D" variabletype="">Contador_Loss</field>
+        <value name="VALUE">
+          <block type="math_number" id="LOSS_CNT_ZERO"><field name="NUM">0</field></block>
+        </value>
+        <next>
+          <block type="math_change" id="INC_SESS_WINS">
+            <field name="VAR" id="SESSION_WINS_001" variabletype="">Session_Wins</field>
+            <value name="DELTA">
+              <shadow type="math_number" id="INC_SW_VAL"><field name="NUM">1</field></shadow>
+            </value>
+            <next>
+              <block type="variables_set" id="RESET_STREAK_WIN">
+                <field name="VAR" id="STREAK_001" variabletype="">Current_Streak</field>
+                <value name="VALUE">
+                  <block type="math_number" id="STREAK_ZERO"><field name="NUM">0</field></block>
+                </value>
+                <next>
+                  <block type="variables_set" id="SET_STREAK_TYPE_WIN">
+                    <field name="VAR" id="STREAK_TYPE_001" variabletype="">Streak_Type</field>
+                    <value name="VALUE">
+                      <block type="text" id="WIN_TYPE_TXT"><field name="TEXT">win</field></block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="RESET_FIB_IDX">
+                        <field name="VAR" id="FIB_IDX_001" variabletype="">Fib_Index</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="FIB_IDX_ZERO"><field name="NUM">0</field></block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="RESET_STAKE_WIN">
+                            <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="GET_BASE_STAKE">
+                                <field name="VAR" id="BASE_STAKE_001" variabletype="">Base_Stake</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="DEACTIVATE_COOLDOWN">
+                                <field name="VAR" id="COOLDOWN_001" variabletype="">Cooldown_Active</field>
+                                <value name="VALUE">
+                                  <block type="logic_boolean" id="CD_FALSE_WIN"><field name="BOOL">FALSE</field></block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="RESET_SKIP_WIN">
+                                    <field name="VAR" id="SKIP_TRADE_001" variabletype="">Skip_Trade</field>
+                                    <value name="VALUE">
+                                      <block type="logic_boolean" id="SKIP_FALSE_WIN"><field name="BOOL">FALSE</field></block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="DEACTIVATE_TILT">
+                                        <field name="VAR" id="ANTI_TILT_001" variabletype="">Anti_Tilt_Mode</field>
+                                        <value name="VALUE">
+                                          <block type="logic_boolean" id="TILT_FALSE_WIN"><field name="BOOL">FALSE</field></block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="DEACTIVATE_RECOVERY">
+                                            <field name="VAR" id="RECOVERY_MODE_001" variabletype="">Recovery_Mode</field>
+                                            <value name="VALUE">
+                                              <block type="logic_boolean" id="REC_FALSE_WIN"><field name="BOOL">FALSE</field></block>
+                                            </value>
+                                            <next>
+                                              <block type="procedures_callnoreturn" id="CALL_UPDATE_WR_WIN">
+                                                <mutation name="Update_Winrate"></mutation>
+                                                <next>
+                                                  <block type="notify" id="NOTIFY_WIN_DETAIL">
+                                                    <field name="NOTIFICATION_TYPE">success</field>
+                                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                                    <value name="MESSAGE">
+                                                      <block type="text_join" id="WIN_DETAIL_JOIN">
+                                                        <mutation items="4"></mutation>
+                                                        <value name="ADD0">
+                                                          <block type="text" id="WIN_D1"><field name="TEXT">🏆 WIN | Profit: </field></block>
+                                                        </value>
+                                                        <value name="ADD1">
+                                                          <block type="read_details" id="WIN_PROFIT_READ">
+                                                            <field name="DETAIL_INDEX">4</field>
+                                                          </block>
+                                                        </value>
+                                                        <value name="ADD2">
+                                                          <block type="text" id="WIN_D2"><field name="TEXT"> | WR: </field></block>
+                                                        </value>
+                                                        <value name="ADD3">
+                                                          <block type="variables_get" id="GET_WR_WIN">
+                                                            <field name="VAR" id="WINRATE_001" variabletype="">Session_Winrate</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="procedures_defnoreturn" id="PROC_FIB_MART" x="400" y="600">
+    <field name="NAME">Fibonacci_Martingale</field>
+    <comment pinned="false" h="80" w="160">Martingale basado en Fibonacci - Escala progresiva inteligente con cap</comment>
+    <statement name="STACK">
+      <block type="math_change" id="INC_FIB_IDX">
+        <field name="VAR" id="FIB_IDX_001" variabletype="">Fib_Index</field>
+        <value name="DELTA">
+          <shadow type="math_number" id="FIB_INC_VAL"><field name="NUM">1</field></shadow>
+        </value>
+        <next>
+          <block type="controls_if" id="CAP_FIB_INDEX">
+            <value name="IF0">
+              <block type="logic_compare" id="FIB_GT_12">
+                <field name="OP">GT</field>
+                <value name="A">
+                  <block type="variables_get" id="GET_FIB_IDX_CAP">
+                    <field name="VAR" id="FIB_IDX_001" variabletype="">Fib_Index</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="FIB_MAX_IDX"><field name="NUM">8</field></block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="variables_set" id="RESET_FIB_TO_8">
+                <field name="VAR" id="FIB_IDX_001" variabletype="">Fib_Index</field>
+                <value name="VALUE">
+                  <block type="math_number" id="FIB_CAP_VAL"><field name="NUM">8</field></block>
+                </value>
+              </block>
+            </statement>
+            <next>
+              <block type="variables_set" id="CALC_FIB_STAKE">
+                <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+                <value name="VALUE">
+                  <block type="math_arithmetic" id="FIB_MULTIPLY_STAKE">
+                    <field name="OP">MULTIPLY</field>
+                    <value name="A">
+                      <shadow type="math_number" id="FIB_MULT_SHADOW"><field name="NUM">1</field></shadow>
+                      <block type="variables_get" id="GET_BASE_FOR_FIB">
+                        <field name="VAR" id="BASE_STAKE_001" variabletype="">Base_Stake</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <shadow type="math_number" id="FIB_MULT_SHADOW2"><field name="NUM">1</field></shadow>
+                      <block type="lists_getIndex" id="GET_FIB_MULTIPLIER">
+                        <mutation statement="false" at="true"></mutation>
+                        <field name="MODE">GET</field>
+                        <field name="WHERE">FROM_START</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id="GET_FIB_SEQ">
+                            <field name="VAR" id="FIB_SEQ_001" variabletype="">Fib_Sequence</field>
+                          </block>
+                        </value>
+                        <value name="AT">
+                          <block type="variables_get" id="GET_FIB_IDX_FOR_LIST">
+                            <field name="VAR" id="FIB_IDX_001" variabletype="">Fib_Index</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <next>
+                  <block type="controls_if" id="CHECK_ANTI_TILT_REDUCTION">
+                    <value name="IF0">
+                      <block type="logic_compare" id="TILT_IS_TRUE">
+                        <field name="OP">EQ</field>
+                        <value name="A">
+                          <block type="variables_get" id="GET_TILT_MODE">
+                            <field name="VAR" id="ANTI_TILT_001" variabletype="">Anti_Tilt_Mode</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_boolean" id="TILT_TRUE_CHECK"><field name="BOOL">TRUE</field></block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="REDUCE_STAKE_TILT">
+                        <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="TILT_REDUCE_CALC">
+                            <field name="OP">MULTIPLY</field>
+                            <value name="A">
+                              <shadow type="math_number" id="TILT_R_SHADOW"><field name="NUM">1</field></shadow>
+                              <block type="variables_get" id="GET_STAKE_TILT">
+                                <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <shadow type="math_number" id="TILT_FACTOR"><field name="NUM">0.75</field></shadow>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="controls_if" id="CHECK_MAX_STAKE_CAP">
+                        <value name="IF0">
+                          <block type="logic_compare" id="STAKE_GT_MAX">
+                            <field name="OP">GT</field>
+                            <value name="A">
+                              <block type="variables_get" id="GET_STAKE_CAP_CHECK">
+                                <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="MAX_STAKE_VALUE"><field name="NUM">15</field></block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="CAP_STAKE_AT_MAX">
+                            <field name="VAR" id="X[(S;ATE$Dbs3flXN{-m" variabletype="">Initial Amount</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="MAX_STAKE_SET"><field name="NUM">15</field></block>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="procedures_defnoreturn" id="PROC_CALC_CONFLUENCE" x="400" y="900">
+    <field name="NAME">Calculate_Confluence</field>
+    <comment pinned="false" h="80" w="160">Multi-Confluence System: Calcula score basado en múltiples indicadores</comment>
+    <statement name="STACK">
+      <block type="variables_set" id="RESET_CONF_SCORE">
+        <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+        <value name="VALUE">
+          <block type="math_number" id="CONF_ZERO"><field name="NUM">0</field></block>
+        </value>
+        <next>
+          <block type="controls_if" id="CONF_CHECK_1_SHORT">
+            <mutation elseif="1"></mutation>
+            <value name="IF0">
+              <block type="logic_compare" id="SHORT_EVEN_HIGH">
+                <field name="OP">GTE</field>
+                <value name="A">
+                  <block type="procedures_callreturn" id="CALL_EVEN_CONF1">
+                    <mutation name="LD Even (%)"></mutation>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="CONF1_THRESH"><field name="NUM">56</field></block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="math_change" id="ADD_CONF_SHORT_EVEN">
+                <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                <value name="DELTA">
+                  <shadow type="math_number" id="CONF_ADD_1"><field name="NUM">1</field></shadow>
+                </value>
+              </block>
+            </statement>
+            <value name="IF1">
+              <block type="logic_compare" id="SHORT_ODD_HIGH">
+                <field name="OP">GTE</field>
+                <value name="A">
+                  <block type="procedures_callreturn" id="CALL_ODD_CONF1">
+                    <mutation name="LD Odd (%)"></mutation>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="CONF1_THRESH_ODD"><field name="NUM">56</field></block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO1">
+              <block type="math_change" id="ADD_CONF_SHORT_ODD">
+                <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                <value name="DELTA">
+                  <shadow type="math_number" id="CONF_ADD_1B"><field name="NUM">1</field></shadow>
+                </value>
+              </block>
+            </statement>
+            <next>
+              <block type="controls_if" id="CONF_CHECK_2_STRONG">
+                <mutation elseif="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="EVEN_VERY_HIGH">
+                    <field name="OP">GTE</field>
+                    <value name="A">
+                      <block type="procedures_callreturn" id="CALL_EVEN_CONF2">
+                        <mutation name="LD Even (%)"></mutation>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="math_number" id="CONF2_THRESH"><field name="NUM">64</field></block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="math_change" id="ADD_CONF_STRONG_EVEN">
+                    <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                    <value name="DELTA">
+                      <shadow type="math_number" id="CONF_ADD_2"><field name="NUM">2</field></shadow>
+                    </value>
+                  </block>
+                </statement>
+                <value name="IF1">
+                  <block type="logic_compare" id="ODD_VERY_HIGH">
+                    <field name="OP">GTE</field>
+                    <value name="A">
+                      <block type="procedures_callreturn" id="CALL_ODD_CONF2">
+                        <mutation name="LD Odd (%)"></mutation>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="math_number" id="CONF2_THRESH_ODD"><field name="NUM">64</field></block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO1">
+                  <block type="math_change" id="ADD_CONF_STRONG_ODD">
+                    <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                    <value name="DELTA">
+                      <shadow type="math_number" id="CONF_ADD_2B"><field name="NUM">2</field></shadow>
+                    </value>
+                  </block>
+                </statement>
+                <next>
+                  <block type="controls_if" id="CONF_CHECK_3_TREND">
+                    <mutation elseif="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_operation" id="TREND_EVEN_RISING">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_compare" id="EVEN_GT_PREV">
+                            <field name="OP">GT</field>
+                            <value name="A">
+                              <block type="procedures_callreturn" id="CALL_EVEN_TREND">
+                                <mutation name="LD Even (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="GET_PREV_EVEN">
+                                <field name="VAR" id="PREV_EVEN_001" variabletype="">Prev_Even_Pct</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="EVEN_ABOVE_50">
+                            <field name="OP">GT</field>
+                            <value name="A">
+                              <block type="procedures_callreturn" id="CALL_EVEN_50">
+                                <mutation name="LD Even (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="FIFTY_1"><field name="NUM">52</field></block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="math_change" id="ADD_CONF_TREND_EVEN">
+                        <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                        <value name="DELTA">
+                          <shadow type="math_number" id="CONF_ADD_TREND1"><field name="NUM">1</field></shadow>
+                        </value>
+                      </block>
+                    </statement>
+                    <value name="IF1">
+                      <block type="logic_operation" id="TREND_ODD_RISING">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_compare" id="ODD_GT_PREV">
+                            <field name="OP">GT</field>
+                            <value name="A">
+                              <block type="procedures_callreturn" id="CALL_ODD_TREND">
+                                <mutation name="LD Odd (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="GET_PREV_ODD">
+                                <field name="VAR" id="PREV_ODD_001" variabletype="">Prev_Odd_Pct</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="ODD_ABOVE_50">
+                            <field name="OP">GT</field>
+                            <value name="A">
+                              <block type="procedures_callreturn" id="CALL_ODD_50">
+                                <mutation name="LD Odd (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="FIFTY_2"><field name="NUM">52</field></block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO1">
+                      <block type="math_change" id="ADD_CONF_TREND_ODD">
+                        <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                        <value name="DELTA">
+                          <shadow type="math_number" id="CONF_ADD_TREND2"><field name="NUM">1</field></shadow>
+                        </value>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="controls_if" id="CONF_CHECK_4_WINRATE">
+                        <value name="IF0">
+                          <block type="logic_compare" id="WR_ABOVE_55">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="GET_WR_CONF">
+                                <field name="VAR" id="WINRATE_001" variabletype="">Session_Winrate</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="WR_THRESH"><field name="NUM">55</field></block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="math_change" id="ADD_CONF_WINRATE">
+                            <field name="VAR" id="CONFLUENCE_001" variabletype="">Confluence_Score</field>
+                            <value name="DELTA">
+                              <shadow type="math_number" id="CONF_ADD_WR"><field name="NUM">1</field></shadow>
+                            </value>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="variables_set" id="SAVE_PREV_EVEN">
+                            <field name="VAR" id="PREV_EVEN_001" variabletype="">Prev_Even_Pct</field>
+                            <value name="VALUE">
+                              <block type="procedures_callreturn" id="CALL_EVEN_SAVE">
+                                <mutation name="LD Even (%)"></mutation>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="SAVE_PREV_ODD">
+                                <field name="VAR" id="PREV_ODD_001" variabletype="">Prev_Odd_Pct</field>
+                                <value name="VALUE">
+                                  <block type="procedures_callreturn" id="CALL_ODD_SAVE">
+                                    <mutation name="LD Odd (%)"></mutation>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="procedures_defnoreturn" id="PROC_CHECK_COOLDOWN" x="400" y="1200">
+    <field name="NAME">Check_Cooldown</field>
+    <comment pinned="false" h="80" w="160">Gestiona el sistema de cooldown - espera N ciclos antes de reactivar</comment>
+    <statement name="STACK">
+      <block type="controls_if" id="IF_COOLDOWN_ACTIVE">
+        <value name="IF0">
+          <block type="logic_compare" id="CD_IS_TRUE">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="GET_CD_STATUS">
+                <field name="VAR" id="COOLDOWN_001" variabletype="">Cooldown_Active</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="logic_boolean" id="CD_TRUE_REF"><field name="BOOL">TRUE</field></block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="math_change" id="INC_CD_COUNTER">
+            <field name="VAR" id="COOLDOWN_CNT_001" variabletype="">Cooldown_Counter</field>
+            <value name="DELTA">
+              <shadow type="math_number" id="CD_INC_VAL"><field name="NUM">1</field></shadow>
+            </value>
+            <next>
+              <block type="controls_if" id="CHECK_CD_EXPIRED">
+                <value name="IF0">
+                  <block type="logic_operation" id="CD_EXPIRED_AND_SIGNAL">
+                    <field name="OP">AND</field>
+                    <value name="A">
+                      <block type="logic_compare" id="CD_CNT_GTE_MAX">
+                        <field name="OP">GTE</field>
+                        <value name="A">
+                          <block type="variables_get" id="GET_CD_CNT">
+                            <field name="VAR" id="COOLDOWN_CNT_001" variabletype="">Cooldown_Counter</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="variables_get" id="GET_CD_MAX">
+                            <field name="VAR" id="COOLDOWN_MAX_001" variabletype="">Cooldown_Max</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_operation" id="SIGNAL_EXISTS">
+                        <field name="OP">OR</field>
+                        <value name="A">
+                          <block type="logic_compare" id="EVEN_SIGNAL_CD">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="procedures_callreturn" id="CALL_EVEN_CD">
+                                <mutation name="LD Even (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="CD_EVEN_THRESH"><field name="NUM">60</field></block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="ODD_SIGNAL_CD">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="procedures_callreturn" id="CALL_ODD_CD">
+                                <mutation name="LD Odd (%)"></mutation>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="CD_ODD_THRESH"><field name="NUM">60</field></block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="DEACTIVATE_CD">
+                    <field name="VAR" id="COOLDOWN_001" variabletype="">Cooldown_Active</field>
+                    <value name="VALUE">
+                      <block type="logic_boolean" id="CD_FALSE_DEACT"><field name="BOOL">FALSE</field></block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="DEACTIVATE_SKIP">
+                        <field name="VAR" id="SKIP_TRADE_001" variabletype="">Skip_Trade</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="SKIP_FALSE_DEACT"><field name="BOOL">FALSE</field></block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="RESET_CD_CNT">
+                            <field name="VAR" id="COOLDOWN_CNT_001" variabletype="">Cooldown_Counter</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="CD_CNT_ZERO"><field name="NUM">0</field></block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="RECOVERY_ON">
+                                <field name="VAR" id="RECOVERY_MODE_001" variabletype="">Recovery_Mode</field>
+                                <value name="VALUE">
+                                  <block type="logic_boolean" id="REC_TRUE"><field name="BOOL">TRUE</field></block>
+                                </value>
+                                <next>
+                                  <block type="notify" id="NOTIFY_CD_OFF">
+                                    <field name="NOTIFICATION_TYPE">success</field>
+                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                    <value name="MESSAGE">
+                                      <shadow type="text" id="CD_OFF_SHADOW"><field name="TEXT">abc</field></shadow>
+                                      <block type="text" id="CD_OFF_MSG"><field name="TEXT">✅ Cooldown terminado - Señal fuerte detectada - Modo Recovery ON</field></block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+  <block type="procedures_defnoreturn" id="PROC_UPDATE_WINRATE" x="400" y="1500">
+    <field name="NAME">Update_Winrate</field>
+    <statement name="STACK">
+      <block type="controls_if" id="CHECK_TRADES_GT_0">
+        <value name="IF0">
+          <block type="logic_compare" id="TRADES_GT_ZERO">
+            <field name="OP">GT</field>
+            <value name="A">
+              <block type="variables_get" id="GET_SESS_TRADES">
+                <field name="VAR" id="SESSION_TRADES_001" variabletype="">Session_Trades</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="ZERO_TRADES"><field name="NUM">0</field></block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="variables_set" id="CALC_WINRATE">
+            <field name="VAR" id="WINRATE_001" variabletype="">Session_Winrate</field>
+            <value name="VALUE">
+              <block type="math_round" id="ROUND_WINRATE">
+                <field name="OP">ROUND</field>
+                <value name="NUM">
+                  <shadow type="math_number" id="WR_ROUND_SHADOW"><field name="NUM">3.1</field></shadow>
+                  <block type="math_arithmetic" id="WR_CALC">
+                    <field name="OP">DIVIDE</field>
+                    <value name="A">
+                      <shadow type="math_number" id="WR_SHADOW_A"><field name="NUM">1</field></shadow>
+                      <block type="math_arithmetic" id="WR_MULTIPLY">
+                        <field name="OP">MULTIPLY</field>
+                        <value name="A">
+                          <shadow type="math_number" id="WR_M_SHADOW"><field name="NUM">1</field></shadow>
+                          <block type="variables_get" id="GET_WINS_WR">
+                            <field name="VAR" id="SESSION_WINS_001" variabletype="">Session_Wins</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number" id="WR_100"><field name="NUM">100</field></shadow>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <shadow type="math_number" id="WR_SHADOW_B"><field name="NUM">1</field></shadow>
+                      <block type="variables_get" id="GET_TRADES_WR">
+                        <field name="VAR" id="SESSION_TRADES_001" variabletype="">Session_Trades</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+  <block type="procedures_defnoreturn" id="PROC_UPDATE_PEAK" x="400" y="1700">
+    <field name="NAME">Update_Peak_Drawdown</field>
+    <comment pinned="false" h="80" w="160">Trailing drawdown protection - ajusta threshold dinámicamente</comment>
+    <statement name="STACK">
+      <block type="controls_if" id="CHECK_NEW_PEAK">
+        <value name="IF0">
+          <block type="logic_compare" id="PROFIT_GT_PEAK">
+            <field name="OP">GT</field>
+            <value name="A">
+              <block type="total_profit" id="GET_PROF_PEAK"></block>
+            </value>
+            <value name="B">
+              <block type="variables_get" id="GET_PEAK">
+                <field name="VAR" id="PEAK_PROFIT_001" variabletype="">Peak_Profit</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="variables_set" id="UPDATE_PEAK">
+            <field name="VAR" id="PEAK_PROFIT_001" variabletype="">Peak_Profit</field>
+            <value name="VALUE">
+              <block type="total_profit" id="SET_PEAK_PROF"></block>
+            </value>
+          </block>
+        </statement>
+        <next>
+          <block type="controls_if" id="CHECK_DRAWDOWN_ADJUST">
+            <value name="IF0">
+              <block type="logic_compare" id="LOSING_STREAK_HIGH">
+                <field name="OP">GTE</field>
+                <value name="A">
+                  <block type="variables_get" id="GET_STREAK_DYN">
+                    <field name="VAR" id="STREAK_001" variabletype="">Current_Streak</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="STREAK_3"><field name="NUM">3</field></block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="variables_set" id="INCREASE_THRESHOLD">
+                <field name="VAR" id="DYN_THRESH_001" variabletype="">Dynamic_Threshold</field>
+                <value name="VALUE">
+                  <block type="math_arithmetic" id="ADD_TO_THRESH">
+                    <field name="OP">ADD</field>
+                    <value name="A">
+                      <shadow type="math_number" id="THRESH_ADD_SHADOW"><field name="NUM">1</field></shadow>
+                      <block type="variables_get" id="GET_BASE_THRESH_DYN">
+                        <field name="VAR" id="BASE_THRESH_001" variabletype="">Base_Threshold</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <shadow type="math_number" id="THRESH_ADD_VAL"><field name="NUM">4</field></shadow>
+                    </value>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="INCREASE_CONF_MIN">
+                    <field name="VAR" id="CONFLUENCE_MIN_001" variabletype="">Confluence_Min</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="CONF_MIN_4"><field name="NUM">4</field></block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <next>
+              <block type="controls_if" id="CHECK_RESET_THRESHOLD">
+                <value name="IF0">
+                  <block type="logic_operation" id="NO_STREAK_CHECK">
+                    <field name="OP">AND</field>
+                    <value name="A">
+                      <block type="logic_compare" id="STREAK_IS_0">
+                        <field name="OP">EQ</field>
+                        <value name="A">
+                          <block type="variables_get" id="GET_STREAK_RESET">
+                            <field name="VAR" id="STREAK_001" variabletype="">Current_Streak</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="math_number" id="ZERO_STR"><field name="NUM">0</field></block>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_compare" id="STREAK_TYPE_WIN">
+                        <field name="OP">EQ</field>
+                        <value name="A">
+                          <block type="variables_get" id="GET_STR_TYPE_RESET">
+                            <field name="VAR" id="STREAK_TYPE_001" variabletype="">Streak_Type</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="text" id="WIN_TXT_RESET"><field name="TEXT">win</field></block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="RESET_DYN_THRESH">
+                    <field name="VAR" id="DYN_THRESH_001" variabletype="">Dynamic_Threshold</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="RESET_TO_BASE_THRESH">
+                        <field name="VAR" id="BASE_THRESH_001" variabletype="">Base_Threshold</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="RESET_CONF_MIN">
+                        <field name="VAR" id="CONFLUENCE_MIN_001" variabletype="">Confluence_Min</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="CONF_MIN_3_RESET"><field name="NUM">3</field></block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="procedures_defnoreturn" id="wG]Unvv@26{cBz*JD!/E" x="800" y="0">
+    <mutation>
+      <arg name="[fld2] Last Digit List" varid="DW3mjXJpPvr7)vhno)~."></arg>
+      <arg name="[fld2] How many ticks?" varid="ZANWip{N:PSAp/tBH^rK"></arg>
+    </mutation>
+    <field name="NAME">(5) FRUITFELLA's LD Analyzer ver.2.0</field>
+    <comment pinned="false" h="80" w="160">Last Digits Analyzer ver.2.0 by Fruitfella</comment>
+    <statement name="STACK">
+      <block type="variables_set" id="3RjgEd@mF*OBS=t9hM)^">
+        <field name="VAR" id="[en@;9L+TKtw(U2~(Ku2" variabletype="">fld2:LastDigitList</field>
+        <value name="VALUE">
+          <block type="lists_create_with" id="#A(Wp/M(a8#(.-^p?HR+">
+            <mutation items="0"></mutation>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="%rUIYdwD]Rl.waYf4UQn">
+            <field name="VAR" id="[en@;9L+TKtw(U2~(Ku2" variabletype="">fld2:LastDigitList</field>
+            <value name="VALUE">
+              <block type="variables_get" id="n)DPI@svxm.@*xUKltKs">
+                <field name="VAR" id="DW3mjXJpPvr7)vhno)~." variabletype="">[fld2] Last Digit List</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="4%%x[#LD|:9+At3-D39~">
+                <field name="VAR" id="TN1+}1m9k)fcT`p#]xKj" variabletype="">fld2:even</field>
+                <value name="VALUE">
+                  <block type="math_number" id="4{u5zwp^C(aL!o#_;X(z">
+                    <field name="NUM">0</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="#J-{EcBJ1agD_%4A[ebm">
+                    <field name="VAR" id="8xeP.9I4nOGGu}x2pz7R" variabletype="">fld2:odd</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="b19$7GQB7}iK_.ph;dEv">
+                        <field name="NUM">0</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="controls_for" id=":2M*c;W^Pg:YAST$NwOX">
+                        <field name="VAR" id="N65.yto^f%i%5lI$2W_=" variabletype="">fld2:n</field>
+                        <value name="FROM">
+                          <block type="math_number" id=";efQ?oxHu9W{.9bNJF=)">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                        <value name="TO">
+                          <block type="variables_get" id="IqS~uH?D4T@*,Z?@Ri^M">
+                            <field name="VAR" id="ZANWip{N:PSAp/tBH^rK" variabletype="">[fld2] How many ticks?</field>
+                          </block>
+                        </value>
+                        <value name="BY">
+                          <block type="math_number" id="KhTBRGOjEIEAmF*hWA9x">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                        <statement name="DO">
+                          <block type="controls_if" id="BUi{=YC39%}.J{[xBr9e">
+                            <mutation else="1"></mutation>
+                            <value name="IF0">
+                              <block type="math_number_property" id="Hg$VF9IrUsx]Awn+,{|9">
+                                <mutation divisor_input="false"></mutation>
+                                <field name="PROPERTY">EVEN</field>
+                                <value name="NUMBER_TO_CHECK">
+                                  <shadow type="math_number" id="_Q_u9$~f^VN)biGPgq0.">
+                                    <field name="NUM">0</field>
+                                  </shadow>
+                                  <block type="lists_getIndex" id="TAr;T})%4x]kGtOo{WPV">
+                                    <mutation statement="false" at="true"></mutation>
+                                    <field name="MODE">GET</field>
+                                    <field name="WHERE">FROM_END</field>
+                                    <value name="VALUE">
+                                      <block type="variables_get" id="9(n#]rma_G$^49vl=cPU">
+                                        <field name="VAR" id="[en@;9L+TKtw(U2~(Ku2" variabletype="">fld2:LastDigitList</field>
+                                      </block>
+                                    </value>
+                                    <value name="AT">
+                                      <block type="variables_get" id="5W-k4.i)d:+,B;qoV!*n">
+                                        <field name="VAR" id="N65.yto^f%i%5lI$2W_=" variabletype="">fld2:n</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="math_change" id="kE,~.,2$*#61c`=:/L?.">
+                                <field name="VAR" id="TN1+}1m9k)fcT`p#]xKj" variabletype="">fld2:even</field>
+                                <value name="DELTA">
+                                  <shadow type="math_number" id="WU:*-CJ#8b!z`^?50t83">
+                                    <field name="NUM">1</field>
+                                  </shadow>
+                                </value>
+                              </block>
+                            </statement>
+                            <statement name="ELSE">
+                              <block type="math_change" id="vj?63`2xurXm+FF;7mjW">
+                                <field name="VAR" id="8xeP.9I4nOGGu}x2pz7R" variabletype="">fld2:odd</field>
+                                <value name="DELTA">
+                                  <shadow type="math_number" id="MD[IGfJ@?#IY,xGc#*Q%">
+                                    <field name="NUM">1</field>
+                                  </shadow>
+                                </value>
+                              </block>
+                            </statement>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="variables_set" id="F|0eO7fJp;k2A`gqI]di">
+                            <field name="VAR" id="WVFA9_%DJ+K3!oq~UT-Y" variabletype="">fld2:even%</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="M{?YlW.]J$Ycn4e^x;S?">
+                                <field name="OP">DIVIDE</field>
+                                <value name="A">
+                                  <shadow type="math_number" id="GBgq@|e_@T`VjHB2P~.t">
+                                    <field name="NUM">1</field>
+                                  </shadow>
+                                  <block type="math_arithmetic" id="2J)CuTtpO?/|xla=-jIn">
+                                    <field name="OP">MULTIPLY</field>
+                                    <value name="A">
+                                      <shadow type="math_number" id="jqpRnx8}bH`zjqt3z-d,">
+                                        <field name="NUM">1</field>
+                                      </shadow>
+                                      <block type="variables_get" id="b`:sZL)SGU5NiLg2Z[Ps">
+                                        <field name="VAR" id="TN1+}1m9k)fcT`p#]xKj" variabletype="">fld2:even</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <shadow type="math_number" id="/QUiY|b]y%(^O#FouRW1">
+                                        <field name="NUM">100</field>
+                                      </shadow>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <shadow type="math_number" id="0.[OE?,PTjpk2C^4X6h,">
+                                    <field name="NUM">100</field>
+                                  </shadow>
+                                  <block type="variables_get" id="3Y7lktBy7B3a[]Qs-ov3">
+                                    <field name="VAR" id="ZANWip{N:PSAp/tBH^rK" variabletype="">[fld2] How many ticks?</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="(F4IDDcv%upIIhlKRtk.">
+                                <field name="VAR" id="WVFA9_%DJ+K3!oq~UT-Y" variabletype="">fld2:even%</field>
+                                <value name="VALUE">
+                                  <block type="math_arithmetic" id="%r@yEEYL3
